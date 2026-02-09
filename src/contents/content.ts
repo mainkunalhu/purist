@@ -18,9 +18,9 @@ const CSS_RULES = `
   { display: none !important; }
 `
 
-const update = async () => {
+const injectStyles = async () => {
   const enabled = await storage.get<boolean>("enabled")
-  const styleTag = document.getElementById(CSS_ID)
+  let styleTag = document.getElementById(CSS_ID)
 
   if (enabled !== false) {
     if (!styleTag) {
@@ -29,20 +29,50 @@ const update = async () => {
       style.textContent = CSS_RULES
       document.documentElement.appendChild(style)
     }
-    if (window.location.pathname.startsWith("/shorts/")) {
-      const videoId = window.location.pathname.split("/")[2]
-      window.location.replace(`https://www.youtube.com/watch?v=${videoId}`)
-    }
   } else if (styleTag) {
     styleTag.remove()
   }
 }
 
-update()
-window.addEventListener("yt-navigate-finish", update)
-storage.watch({ enabled: update })
+const handleRedirect = async () => {
+  const enabled = await storage.get<boolean>("enabled")
+  if (enabled === false) return
 
-new MutationObserver(update).observe(document.documentElement, {
-  subtree: true,
-  childList: true
+  if (window.location.pathname.startsWith("/shorts/")) {
+    const videoId = window.location.pathname.split("/")[2]
+    if (videoId) {
+      window.location.replace(`https://www.youtube.com/watch?v=${videoId}`)
+    }
+  }
+}
+
+injectStyles()
+handleRedirect()
+
+window.addEventListener("yt-navigate-start", handleRedirect)
+window.addEventListener("yt-navigate-finish", () => {
+  injectStyles()
+  handleRedirect()
+})
+
+storage.watch({
+  enabled: () => {
+    injectStyles()
+    handleRedirect()
+  }
+})
+
+const observer = new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    if (mutation.type === "childList") {
+      const styleTag = document.getElementById(CSS_ID)
+      if (!styleTag) injectStyles()
+      break
+    }
+  }
+})
+
+observer.observe(document.documentElement, {
+  childList: true,
+  subtree: false
 })
